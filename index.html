@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pixel Physics Car</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- MAIN MENU -->
+  <div id="menuScreen" class="screen">
+    <h1>PIXEL CAR SIM</h1>
+    <img id="mockup" src="/mnt/data/plan.jpg" alt="plan reference">
+    <div class="menuBtns">
+      <button id="startBtn" class="btn">Start Simulation</button>
+      <button id="instrBtn" class="btn">View Instructions</button>
+      <button id="exitBtn" class="btn">Exit</button>
+    </div>
+    <div class="small">Pixel-style physics demo — use ArrowUp to accelerate, ArrowDown to brake.</div>
+  </div>
+
+  <!-- INSTRUCTIONS -->
+  <div id="instructionsScreen" class="screen hidden">
+    <h2>Instructions</h2>
+    <div class="panel">
+      <p>Goal: drive along a 300 m track made of 3 surfaces: <strong>ICE</strong>, <strong>SAND</strong>, <strong>WOOD</strong>.</p>
+      <ul>
+        <li><strong>Ice</strong> — very low friction, slides easily.</li>
+        <li><strong>Sand</strong> — high friction, slows you down.</li>
+        <li><strong>Wood</strong> — medium friction.</li>
+      </ul>
+      <p>Controls:
+        <strong>ArrowUp</strong> = Accelerate, <strong>ArrowDown</strong> = Brake,
+        <strong>Space</strong> = Pause/Resume, <strong>R</strong> = Restart.
+      </p>
+      <p>Physics panel shows speed, position, acceleration, friction, slope.</p>
+    </div>
+    <div class="row">
+      <button id="backFromInstr" class="btn">Back</button>
+    </div>
+  </div>
+
+  <!-- SIMULATION -->
+  <div id="simScreen" class="screen hidden">
+    <div id="topBar">
+      <div id="surfaceLabel">Surface: -</div>
+      <div id="physicsPanel" class="panel">
+        Speed: <span id="speedVal">0.00</span> m/s<br>
+        Position: <span id="posVal">0.00</span> m<br>
+        Accel: <span id="accVal">0.00</span> m/s²<br>
+        μ: <span id="muVal">0.00</span><br>
+        Slope: <span id="slopeVal">0.0</span>°
+      </div>
+      <div class="controls panel">
+        <button id="accelBtn" class="smallBtn">▲</button>
+        <button id="brakeBtn" class="smallBtn">▼</button>
+        <button id="pauseBtn" class="smallBtn">Pause</button>
+        <button id="restartBtn" class="smallBtn">Restart</button>
+        <button id="toMenuBtn" class="smallBtn">Menu</button>
+      </div>
+    </div>
+
+    <div id="canvasWrap" class="panel">
+      <canvas id="gameCanvas" width="900" height="240"></canvas>
+      <div id="progressWrap">
+        <label for="progressBar">Progress</label>
+        <progress id="progressBar" value="0" max="300"></progress>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESULTS -->
+  <div id="resultsScreen" class="screen hidden">
+    <h2>Results</h2>
+    <div class="panel" id="resultsPanel">
+      <div>Final distance: <span id="finalDistance">0.00</span> m</div>
+      <div>Final speed: <span id="finalSpeed">0.00</span> m/s</div>
+      <div>Time duration: <span id="totalTime">0.00</span> s</div>
+      <div>Surface that slowed most: <span id="worstSurface">-</span></div>
+    </div>
+    <canvas id="resultsGraph" width="700" height="180"></canvas>
+    <div class="row">
+      <button id="backToMenu" class="btn">Back to Menu</button>
+      <button id="restartFromResults" class="btn">Restart</button>
+    </div>
+  </div>
+
+<script src="main.js"></script>
+</body>
+</html>
