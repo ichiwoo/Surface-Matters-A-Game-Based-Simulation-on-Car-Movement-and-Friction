@@ -1,392 +1,308 @@
-// main.js - Pixel-style physics car sim
-// Ready to paste. No external libs.
-
-'use strict';
-
-/* ---------- CONFIG ---------- */
-const PIXELS_PER_M = 3;           // 3 px per meter => track 300m -> 900 px
-const TRACK_M = 300;
-const CANVAS_W = 900, CANVAS_H = 240;
-
-const m = 1000;                   // car mass (kg)
-const g = 9.81;                   // gravity
-const DRIVE_FORCE = 4000;         // N when accelerating
-const BRAKE_FORCE = 8000;         // braking force
-const MAX_SPEED = 50;             // m/s
-const DT_MAX = 0.05;
-
-const segments = [
-  {name:'ICE',  start:0,   end:100, mu:0.05, slopeDeg: 0},
-  {name:'SAND', start:100, end:200, mu:0.30, slopeDeg: 1.5},
-  {name:'WOOD', start:200, end:300, mu:0.15, slopeDeg:-0.8}
-];
-
-/* ---------- DOM ---------- */
-const menuScreen = document.getElementById('menuScreen');
-const instrScreen = document.getElementById('instructionsScreen');
-const simScreen = document.getElementById('simScreen');
-const resultsScreen = document.getElementById('resultsScreen');
-
-const startBtn = document.getElementById('startBtn');
-const instrBtn = document.getElementById('instrBtn');
-const exitBtn = document.getElementById('exitBtn');
-const backFromInstr = document.getElementById('backFromInstr');
-const toMenuBtn = document.getElementById('toMenuBtn');
-const backToMenu = document.getElementById('backToMenu');
-const restartFromResults = document.getElementById('restartFromResults');
-
-const accelBtn = document.getElementById('accelBtn');
-const brakeBtn = document.getElementById('brakeBtn');
-const pauseBtn = document.getElementById('pauseBtn');
-const restartBtn = document.getElementById('restartBtn');
-
-const surfaceLabel = document.getElementById('surfaceLabel');
-const speedVal = document.getElementById('speedVal');
-const posVal = document.getElementById('posVal');
-const accVal = document.getElementById('accVal');
-const muVal = document.getElementById('muVal');
-const slopeVal = document.getElementById('slopeVal');
-
-const progressBar = document.getElementById('progressBar');
-
-const finalDistance = document.getElementById('finalDistance');
-const finalSpeed = document.getElementById('finalSpeed');
-const totalTime = document.getElementById('totalTime');
-const worstSurface = document.getElementById('worstSurface');
-
-const gameCanvas = document.getElementById('gameCanvas');
-const ctx = gameCanvas.getContext('2d', {alpha:false});
-const resultsGraph = document.getElementById('resultsGraph');
-const gctx = resultsGraph.getContext('2d', {alpha:false});
-
-/* ---------- STATE ---------- */
-let state = {
-  x: 0,            // meters
-  v: 0,            // m/s
-  a: 0,            // m/s^2
-  time: 0,         // seconds
-  running: false,
+// === GAME STATE ===
+const state = {
+  screen: 'menu',
   paused: false,
-  accelerating: false,
-  braking: false,
-  finished: false,
-  samples: []      // store {t,x,v} for graph
+  pos: 0,
+  vel: 0,
+  acc: 0,
+  time: 0,
+  trackLength: 300,
+  history: [],
+  surfaceStats: { ice: 0, sand: 0, wood: 0 }
 };
 
-let segmentStats = {};
-segments.forEach(s => segmentStats[s.name] = {time:0, distance:0, slowdown:0});
+const keys = { up: false, down: false };
 
-/* ---------- UTIL ---------- */
-function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
-function degToRad(d){ return d * Math.PI/180; }
-function getSegmentAtPosition(x){
-  const xm = clamp(x,0,TRACK_M-1e-6);
-  for(const s of segments) if(xm >= s.start && xm < s.end) return s;
-  return segments[segments.length-1];
+// === SURFACES ===
+const surfaces = [
+  { name: 'ice', start: 0, end: 100, mu: 0.1, color: '#a5f3fc', emoji: '🧊' },
+  { name: 'sand', start: 100, end: 200, mu: 0.8, color: '#fde047', emoji: '🏖️' },
+  { name: 'wood', start: 200, end: 300, mu: 0.4, color: '#d97706', emoji: '🪵' }
+];
+
+const GRAVITY = 9.8;
+const ENGINE_ACC = 5;
+const BRAKE_ACC = -8;
+const SLOPE = 0;
+
+// === ELEMENTS ===
+const screens = {
+  menu: document.getElementById('menuScreen'),
+  instr: document.getElementById('instructionsScreen'),
+  sim: document.getElementById('simScreen'),
+  results: document.getElementById('resultsScreen')
+};
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const resultsCanvas = document.getElementById('resultsGraph');
+const resultsCtx = resultsCanvas.getContext('2d');
+
+// === SCREEN MANAGEMENT ===
+function showScreen(name) {
+  Object.keys(screens).forEach(k => screens[k].classList.add('hidden'));
+  screens[name].classList.remove('hidden');
+  state.screen = name;
 }
 
-/* ---------- PIXEL CAR SPRITE (drawn on small canvas then scaled) ---------- */
-const spriteW = 16, spriteH = 8;
-const spriteScale = 3; // scale up for pixel look
+// === MENU HANDLERS ===
+document.getElementById('startBtn').onclick = () => {
+  resetSimulation();
+  showScreen('sim');
+};
+document.getElementById('instrBtn').onclick = () => showScreen('instr');
+document.getElementById('backFromInstr').onclick = () => showScreen('menu');
+document.getElementById('toMenuBtn').onclick = () => showScreen('menu');
+document.getElementById('backToMenu').onclick = () => showScreen('menu');
+document.getElementById('restartFromResults').onclick = () => {
+  resetSimulation();
+  showScreen('sim');
+};
 
-function createCarSprite(){
-  const oc = document.createElement('canvas');
-  oc.width = spriteW;
-  oc.height = spriteH;
-  const octx = oc.getContext('2d');
-  octx.imageSmoothingEnabled = false;
+// === CONTROL HANDLERS ===
+document.getElementById('accelBtn').onclick = () => keys.up = !keys.up;
+document.getElementById('brakeBtn').onclick = () => keys.down = !keys.down;
+document.getElementById('pauseBtn').onclick = togglePause;
+document.getElementById('restartBtn').onclick = () => resetSimulation();
 
-  // background transparent
-  // draw body
-  octx.fillStyle = '#b52d2d'; // red-ish body
-  octx.fillRect(2,2,12,4);
-  octx.fillStyle = '#6b1b1b';
-  octx.fillRect(2,5,4,2);
-  octx.fillRect(10,5,4,2);
-  // windows
-  octx.fillStyle = '#9fe6ff';
-  octx.fillRect(4,2,4,2);
-  octx.fillRect(8,2,4,2);
-  // wheels
-  octx.fillStyle = '#111';
-  octx.fillRect(3,6,3,2);
-  octx.fillRect(10,6,3,2);
-
-  return oc;
-}
-const carSprite = createCarSprite();
-
-/* ---------- DRAWING / RENDER ---------- */
-function render(){
-  ctx.imageSmoothingEnabled = false;
-  // clear
-  ctx.fillStyle = '#87c8ff';
-  ctx.fillRect(0,0,CANVAS_W,CANVAS_H);
-
-  // draw sky ground line
-  ctx.fillStyle = '#0b1722';
-  ctx.fillRect(0, CANVAS_H - 48, CANVAS_W, 48);
-
-  // draw segments as color bands and slight wave for slope
-  for(const s of segments){
-    const sx = Math.round(s.start * PIXELS_PER_M);
-    const ex = Math.round(s.end * PIXELS_PER_M);
-    let color;
-    if(s.name === 'ICE') color = '#c8f0ff';
-    else if(s.name === 'SAND') color = '#e0b27a';
-    else color = '#9b6b3f';
-    ctx.fillStyle = color;
-    ctx.fillRect(sx, CANVAS_H - 48, ex - sx, 48);
-
-    // small label
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.font = '10px monospace';
-    ctx.fillText(s.name, sx + 8, CANVAS_H - 18);
-  }
-
-  // draw ticks every 50 m
-  ctx.fillStyle = '#001318';
-  ctx.font = '10px monospace';
-  for(let m50=0;m50<=300;m50+=50){
-    const px = Math.round(m50 * PIXELS_PER_M);
-    ctx.fillRect(px, CANVAS_H - 48 - 6, 2, 6);
-    ctx.fillText(m50 + 'm', px+2, CANVAS_H - 50);
-  }
-
-  // draw car (centered vertically on road)
-  const carXpx = clamp(Math.round(state.x * PIXELS_PER_M), 0, CANVAS_W - spriteW * spriteScale);
-  const carYpx = CANVAS_H - 48 - (spriteH * spriteScale) - 6;
-  ctx.drawImage(carSprite, 0,0, spriteW, spriteH, carXpx, carYpx, spriteW * spriteScale, spriteH * spriteScale);
-
-  // small speed bubble
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.fillRect(carXpx, carYpx - 22, 72, 18);
-  ctx.fillStyle = '#e6eef6';
-  ctx.font = '10px monospace';
-  ctx.fillText(`v ${state.v.toFixed(1)} m/s`, carXpx + 6, carYpx - 8);
+function togglePause() {
+  state.paused = !state.paused;
+  document.getElementById('pauseBtn').textContent = state.paused ? '▶ Resume' : '⏸ Pause';
 }
 
-/* ---------- PHYSICS ---------- */
-function updatePhysics(dt){
-  if(state.finished || state.paused) return;
-  // cap dt
-  dt = Math.min(dt, DT_MAX);
+// === KEYBOARD ===
+window.addEventListener('keydown', e => {
+  if (state.screen !== 'sim') return;
+  if (e.key === 'ArrowUp') keys.up = true;
+  if (e.key === 'ArrowDown') keys.down = true;
+  if (e.key === ' ') { e.preventDefault(); togglePause(); }
+  if (e.key === 'r' || e.key === 'R') resetSimulation();
+});
 
-  const seg = getSegmentAtPosition(state.x);
-  const theta = degToRad(seg.slopeDeg);
-  const mu = seg.mu;
+window.addEventListener('keyup', e => {
+  if (e.key === 'ArrowUp') keys.up = false;
+  if (e.key === 'ArrowDown') keys.down = false;
+});
 
-  // Forces
-  const Fdrive = state.accelerating ? DRIVE_FORCE : 0;
-  let Fbrake = 0;
-  if(state.braking) {
-    // braking opposes direction of motion. If stopped, braking applies to prevent forward push.
-    Fbrake = - Math.sign(state.v || 1) * BRAKE_FORCE;
+// === SIMULATION RESET ===
+function resetSimulation() {
+  state.pos = 0;
+  state.vel = 0;
+  state.acc = 0;
+  state.time = 0;
+  state.paused = false;
+  state.history = [];
+  state.surfaceStats = { ice: 0, sand: 0, wood: 0 };
+  keys.up = false;
+  keys.down = false;
+  document.getElementById('pauseBtn').textContent = '⏸ Pause';
+  document.getElementById('progressBar').value = 0;
+}
+
+// === PHYSICS ===
+function getCurrentSurface() {
+  return surfaces.find(s => state.pos >= s.start && state.pos < s.end) || surfaces[surfaces.length - 1];
+}
+
+function updatePhysics(dt) {
+  if (state.paused || state.pos >= state.trackLength) return;
+  
+  const surface = getCurrentSurface();
+  const mu = surface.mu;
+  
+  // Track time on each surface
+  state.surfaceStats[surface.name] += dt;
+  
+  // Calculate acceleration
+  let acc = 0;
+  if (keys.up) acc += ENGINE_ACC;
+  if (keys.down) acc += BRAKE_ACC;
+  
+  // Friction force
+  const frictionAcc = -mu * GRAVITY * Math.sign(state.vel);
+  if (Math.abs(state.vel) > 0.01) {
+    acc += frictionAcc;
   }
-
-  // friction opposes motion (kinetic) - magnitude
-  const FfrictionMag = mu * m * g * Math.cos(theta);
-  const Ffriction = - Math.sign(state.v || 1) * FfrictionMag;
-
-  // gravity along slope: positive forward when downhill
-  const Fgravity = m * g * Math.sin(-theta); // choose sign so downhill gives + forward push
-
-  // net force = drive + brake + friction + gravity
-  const Fnet = Fdrive + Fbrake + Ffriction + Fgravity;
-
-  // acceleration
-  const a = Fnet / m;
-
-  // integrate
-  state.v += a * dt;
-  // clamp small velocities
-  if(Math.abs(state.v) < 0.01) state.v = 0;
-  state.v = clamp(state.v, 0, MAX_SPEED); // no reverse in this sim
-  state.x += state.v * dt;
+  
+  // Gravity on slope
+  acc += GRAVITY * Math.sin(SLOPE * Math.PI / 180);
+  
+  state.acc = acc;
+  state.vel += acc * dt;
+  
+  // Prevent negative speed
+  if (state.vel < 0) state.vel = 0;
+  
+  state.pos += state.vel * dt;
   state.time += dt;
-  state.a = a;
-
-  // collect stats per segment
-  const ss = segmentStats[seg.name];
-  ss.time += dt;
-  ss.distance += state.v * dt;
-  if(a < -0.05) ss.slowdown += Math.abs(a) * dt;
-
-  // sample for graph
-  state.samples.push({t: state.time, x: state.x, v: state.v});
-
-  // check finish
-  if(state.x >= TRACK_M){
-    state.finished = true;
-    state.running = false;
+  
+  // Clamp position
+  if (state.pos >= state.trackLength) {
+    state.pos = state.trackLength;
+    state.vel = 0;
     showResults();
   }
+  
+  // Record history
+  if (state.history.length === 0 || state.time - state.history[state.history.length - 1].t > 0.1) {
+    state.history.push({ t: state.time, pos: state.pos, vel: state.vel });
+  }
+  
+  updateUI(surface, mu);
 }
 
-/* ---------- UI / LOOP ---------- */
-let lastTime = performance.now();
-function loop(now){
-  const dt = (now - lastTime) / 1000;
-  lastTime = now;
-  if(state.running && !state.paused) updatePhysics(dt);
-  render();
-  updateHUD();
-  requestAnimationFrame(loop);
+// === UI UPDATE ===
+function updateUI(surface, mu) {
+  document.getElementById('surfaceLabel').textContent = `${surface.emoji} ${surface.name.toUpperCase()}`;
+  document.getElementById('speedVal').textContent = state.vel.toFixed(2);
+  document.getElementById('posVal').textContent = state.pos.toFixed(2);
+  document.getElementById('accVal').textContent = state.acc.toFixed(2);
+  document.getElementById('muVal').textContent = mu.toFixed(2);
+  document.getElementById('slopeVal').textContent = SLOPE.toFixed(1);
+  document.getElementById('progressBar').value = state.pos;
 }
 
-function updateHUD(){
-  const seg = getSegmentAtPosition(state.x);
-  surfaceLabel.textContent = `Surface: ${seg.name}`;
-  speedVal.textContent = state.v.toFixed(2);
-  posVal.textContent = state.x.toFixed(2);
-  accVal.textContent = state.a.toFixed(2);
-  muVal.textContent = seg.mu.toFixed(2);
-  slopeVal.textContent = seg.slopeDeg.toFixed(1);
-  progressBar.value = clamp(state.x,0,TRACK_M);
-}
-
-/* ---------- RESULTS ---------- */
-function showResults(){
-  // compute worst surface by slowdown
-  let worst = null;
-  let worstVal = -1;
-  for(const k of Object.keys(segmentStats)){
-    if(segmentStats[k].slowdown > worstVal){
-      worstVal = segmentStats[k].slowdown;
-      worst = k;
+// === RENDERING ===
+function render() {
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Draw track surfaces
+  const scale = canvas.width / state.trackLength;
+  surfaces.forEach(s => {
+    ctx.fillStyle = s.color;
+    ctx.fillRect(s.start * scale, 0, (s.end - s.start) * scale, canvas.height);
+    
+    // Draw surface labels
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(s.emoji + ' ' + s.name.toUpperCase(), (s.start + s.end) / 2 * scale, 30);
+  });
+  
+  // Draw road markings
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([10, 10]);
+  ctx.beginPath();
+  ctx.moveTo(0, canvas.height / 2);
+  ctx.lineTo(canvas.width, canvas.height / 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  
+  // Draw car
+  const carX = (state.pos / state.trackLength) * canvas.width;
+  const carY = canvas.height / 2;
+  const carW = 40;
+  const carH = 24;
+  
+  // Car body
+  ctx.fillStyle = '#ef4444';
+  ctx.fillRect(carX - carW/2, carY - carH/2, carW, carH);
+  
+  // Car windows
+  ctx.fillStyle = '#3b82f6';
+  ctx.fillRect(carX - carW/2 + 8, carY - carH/2 + 4, 12, 8);
+  ctx.fillRect(carX - carW/2 + 24, carY - carH/2 + 4, 12, 8);
+  
+  // Wheels
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.arc(carX - 12, carY + carH/2, 6, 0, Math.PI * 2);
+  ctx.arc(carX + 12, carY + carH/2, 6, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Speed indicator
+  if (state.vel > 0) {
+    for (let i = 0; i < 3; i++) {
+      ctx.fillStyle = `rgba(255,255,255,${0.6 - i * 0.2})`;
+      ctx.fillRect(carX - carW/2 - 15 - i * 8, carY - 5, 6, 2);
+      ctx.fillRect(carX - carW/2 - 15 - i * 8, carY + 3, 6, 2);
     }
   }
-
-  finalDistance.textContent = clamp(state.x,0,TRACK_M).toFixed(2);
-  finalSpeed.textContent = state.v.toFixed(2);
-  totalTime.textContent = state.time.toFixed(2);
-  worstSurface.textContent = worst || '-';
-
-  // draw simple speed vs position graph
-  drawResultsGraph();
-
-  // show results screen
-  simScreen.classList.add('hidden');
-  resultsScreen.classList.remove('hidden');
-}
-
-/* draw graph: speed vs position */
-function drawResultsGraph(){
-  // clear
-  gctx.fillStyle = '#081018';
-  gctx.fillRect(0,0, resultsGraph.width, resultsGraph.height);
-
-  if(state.samples.length < 2) return;
-  // find bounds
-  const xs = state.samples.map(s => s.x);
-  const vs = state.samples.map(s => s.v);
-  const xmax = Math.max(...xs, TRACK_M);
-  const vmax = Math.max(...vs, 1);
-
-  // margins
-  const mleft = 40, mtop = 12, mright = 12, mbottom = 30;
-  const w = resultsGraph.width - mleft - mright;
-  const h = resultsGraph.height - mtop - mbottom;
-
-  // axes
-  gctx.strokeStyle = '#ffffff';
-  gctx.lineWidth = 1;
-  gctx.beginPath();
-  gctx.moveTo(mleft, mtop);
-  gctx.lineTo(mleft, mtop + h);
-  gctx.lineTo(mleft + w, mtop + h);
-  gctx.stroke();
-
-  // plot
-  gctx.beginPath();
-  const scaleX = w / xmax;
-  const scaleY = h / vmax;
-  for(let i=0;i<state.samples.length;i++){
-    const s = state.samples[i];
-    const px = mleft + s.x * scaleX;
-    const py = mtop + h - (s.v * scaleY);
-    if(i===0) gctx.moveTo(px,py); else gctx.lineTo(px,py);
+  
+  // Distance markers
+  ctx.fillStyle = '#fff';
+  ctx.font = '12px monospace';
+  ctx.textAlign = 'center';
+  for (let i = 0; i <= 300; i += 50) {
+    const x = (i / state.trackLength) * canvas.width;
+    ctx.fillText(i + 'm', x, canvas.height - 10);
   }
-  gctx.strokeStyle = '#ffd67a';
-  gctx.lineWidth = 2;
-  gctx.stroke();
-
-  // labels
-  gctx.fillStyle = '#dcecff';
-  gctx.font = '12px monospace';
-  gctx.fillText('Speed vs Position', mleft, 12);
-  gctx.font = '10px monospace';
-  gctx.fillText('0 m', mleft, mtop + h + 18);
-  gctx.fillText(`${Math.round(xmax)} m`, mleft + w - 30, mtop + h + 18);
-  gctx.fillText(`${Math.round(vmax)} m/s`, 6, mtop + 10);
 }
 
-/* ---------- CONTROL HANDLERS ---------- */
-function startSimulation(){
-  // reset
-  state.x = 0; state.v = 0; state.a = 0; state.time = 0;
-  state.running = true; state.paused = false; state.finished = false;
-  state.accelerating = false; state.braking = false;
-  state.samples = [];
-  // reset stats
-  for(const k of Object.keys(segmentStats)) segmentStats[k] = {time:0, distance:0, slowdown:0};
-  // switch screens
-  menuScreen.classList.add('hidden');
-  instrScreen.classList.add('hidden');
-  resultsScreen.classList.add('hidden');
-  simScreen.classList.remove('hidden');
+// === RESULTS ===
+function showResults() {
+  document.getElementById('finalDistance').textContent = state.pos.toFixed(2);
+  document.getElementById('finalSpeed').textContent = state.vel.toFixed(2);
+  document.getElementById('totalTime').textContent = state.time.toFixed(2);
+  
+  // Find worst surface
+  const worst = Object.entries(state.surfaceStats).reduce((a, b) => a[1] > b[1] ? a : b);
+  document.getElementById('worstSurface').textContent = worst[0].toUpperCase() + ' (' + worst[1].toFixed(1) + 's)';
+  
+  drawGraph();
+  showScreen('results');
 }
 
-function togglePause(){
-  state.paused = !state.paused;
-  pauseBtn.textContent = state.paused ? 'Resume' : 'Pause';
+function drawGraph() {
+  const w = resultsCanvas.width;
+  const h = resultsCanvas.height;
+  
+  resultsCtx.fillStyle = '#1e293b';
+  resultsCtx.fillRect(0, 0, w, h);
+  
+  if (state.history.length < 2) return;
+  
+  const maxT = state.history[state.history.length - 1].t;
+  const maxV = Math.max(...state.history.map(p => p.vel));
+  
+  // Draw grid
+  resultsCtx.strokeStyle = '#374151';
+  resultsCtx.lineWidth = 1;
+  for (let i = 0; i <= 5; i++) {
+    const y = h - (i / 5) * h;
+    resultsCtx.beginPath();
+    resultsCtx.moveTo(0, y);
+    resultsCtx.lineTo(w, y);
+    resultsCtx.stroke();
+  }
+  
+  // Draw speed line
+  resultsCtx.strokeStyle = '#4ade80';
+  resultsCtx.lineWidth = 3;
+  resultsCtx.beginPath();
+  
+  state.history.forEach((p, i) => {
+    const x = (p.t / maxT) * w;
+    const y = h - (p.vel / maxV) * h;
+    if (i === 0) resultsCtx.moveTo(x, y);
+    else resultsCtx.lineTo(x, y);
+  });
+  
+  resultsCtx.stroke();
+  
+  // Labels
+  resultsCtx.fillStyle = '#fff';
+  resultsCtx.font = 'bold 14px monospace';
+  resultsCtx.fillText('Speed vs Time', 10, 20);
+  resultsCtx.font = '12px monospace';
+  resultsCtx.fillText(`Max: ${maxV.toFixed(1)} m/s`, 10, 40);
+  resultsCtx.fillText(`Time: ${maxT.toFixed(1)} s`, w - 100, 20);
 }
 
-function restartSimulation(){
-  startSimulation();
+// === GAME LOOP ===
+let lastTime = 0;
+function gameLoop(timestamp) {
+  const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+  lastTime = timestamp;
+  
+  if (state.screen === 'sim') {
+    updatePhysics(dt);
+    render();
+  }
+  
+  requestAnimationFrame(gameLoop);
 }
 
-function exitToMenu(){
-  // show menu screen
-  simScreen.classList.add('hidden');
-  instrScreen.classList.add('hidden');
-  resultsScreen.classList.add('hidden');
-  menuScreen.classList.remove('hidden');
-}
-
-/* ---------- Input binding ---------- */
-window.addEventListener('keydown', (e)=>{
-  if(e.key === 'ArrowUp') state.accelerating = true;
-  if(e.key === 'ArrowDown') state.braking = true;
-  if(e.key === ' ') { e.preventDefault(); togglePause(); }
-  if(e.key === 'r' || e.key === 'R') restartSimulation();
-});
-window.addEventListener('keyup', (e)=>{
-  if(e.key === 'ArrowUp') state.accelerating = false;
-  if(e.key === 'ArrowDown') state.braking = false;
-});
-
-/* Buttons */
-startBtn.addEventListener('click', ()=> { startSimulation(); });
-instrBtn.addEventListener('click', ()=> { menuScreen.classList.add('hidden'); instrScreen.classList.remove('hidden'); });
-exitBtn.addEventListener('click', ()=> { window.close ? window.close() : alert('Close the tab to exit.'); });
-backFromInstr.addEventListener('click', ()=> { instrScreen.classList.add('hidden'); menuScreen.classList.remove('hidden'); });
-
-accelBtn.addEventListener('mousedown', ()=> state.accelerating = true);
-accelBtn.addEventListener('mouseup', ()=> state.accelerating = false);
-brakeBtn.addEventListener('mousedown', ()=> state.braking = true);
-brakeBtn.addEventListener('mouseup', ()=> state.braking = false);
-
-pauseBtn.addEventListener('click', togglePause);
-restartBtn.addEventListener('click', restartSimulation);
-toMenuBtn.addEventListener('click', exitToMenu);
-
-backToMenu.addEventListener('click', exitToMenu);
-restartFromResults.addEventListener('click', ()=> { restartSimulation(); resultsScreen.classList.add('hidden'); simScreen.classList.remove('hidden'); });
-
-/* ---------- Start loop ---------- */
-requestAnimationFrame(loop);
-
-/* ---------- Initial render ---------- */
-render();
-updateHUD();
+requestAnimationFrame(gameLoop);
