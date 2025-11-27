@@ -713,11 +713,15 @@ function gameLoop(timestamp) {
     
     renderSky();
     renderGame();
+<<<<<<< HEAD
     // ===== MAIN MENU =====
     document.getElementById('startBtn').addEventListener('click', () => {
     document.getElementById('mainMenu').classList.add('hidden');
     resetSimulation();
     });
+=======
+    
+>>>>>>> 3b2dcd8e321b1e118439bfa67998f1197f5b3906
     requestAnimationFrame(gameLoop);
 }
 
