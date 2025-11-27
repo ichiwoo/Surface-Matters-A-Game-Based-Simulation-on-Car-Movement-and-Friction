@@ -31,12 +31,13 @@ const terrains = [
         baseMu: 0.15,
         color: '#a5f3fc',
         darkColor: '#06b6d4',
-        slopes: [
-            { start: 0, end: 80, angle: 0 },
-            { start: 80, end: 120, angle: -3 },
-            { start: 120, end: 180, angle: 2 },
-            { start: 180, end: 250, angle: 5 }
-        ]
+       slopes: [
+    { start: 0, end: 50, angle: 0 },
+    { start: 50, end: 100, angle: -5 },
+    { start: 100, end: 150, angle: -7 },
+    { start: 150, end: 200, angle: 3 },
+    { start: 200, end: 250, angle: 8 }
+]
     },
     {
         name: 'SAND',
@@ -46,12 +47,13 @@ const terrains = [
         baseMu: 0.70,
         color: '#fde047',
         darkColor: '#eab308',
-        slopes: [
-            { start: 250, end: 320, angle: 0 },
-            { start: 320, end: 380, angle: 4 },
-            { start: 380, end: 440, angle: -2 },
-            { start: 440, end: 500, angle: 2 }
-        ]
+     slopes: [
+    { start: 250, end: 300, angle: 4 },
+    { start: 300, end: 350, angle: 9 },
+    { start: 350, end: 400, angle: 0 },
+    { start: 400, end: 450, angle: -6 },
+    { start: 450, end: 500, angle: 5 }
+]
     },
     {
         name: 'WOOD',
@@ -62,11 +64,12 @@ const terrains = [
         color: '#d97706',
         darkColor: '#92400e',
         slopes: [
-            { start: 500, end: 580, angle: 0 },
-            { start: 580, end: 640, angle: -4 },
-            { start: 640, end: 690, angle: 6 },
-            { start: 690, end: 750, angle: 1 }
-        ]
+    { start: 500, end: 550, angle: -3 },
+    { start: 550, end: 600, angle: -8 },
+    { start: 600, end: 650, angle: 6 },
+    { start: 650, end: 700, angle: 10 },
+    { start: 700, end: 750, angle: 2 }
+]
     }
 ];
 
@@ -127,6 +130,30 @@ function getCurrentTerrain() {
 function getCurrentSlope(terrain) {
     const slope = terrain.slopes.find(s => state.pos >= s.start && state.pos < s.end);
     return slope ? slope.angle : 0;
+}
+
+function getTerrainHeightAt(position) {
+    const terrain = getCurrentTerrain();
+    const slope = terrain.slopes.find(s => position >= s.start && position < s.end);
+    
+    if (!slope) return 0;
+    
+    // Calculate accumulated height from previous slopes
+    let accumulatedHeight = 0;
+    for (let s of terrain.slopes) {
+        if (s.end <= slope.start) {
+            const segmentLength = s.end - s.start;
+            accumulatedHeight += segmentLength * Math.tan((s.angle * Math.PI) / 180);
+        } else {
+            break;
+        }
+    }
+    
+    // Add height from current position in current slope
+    const distanceInSlope = position - slope.start;
+    accumulatedHeight += distanceInSlope * Math.tan((slope.angle * Math.PI) / 180);
+    
+    return accumulatedHeight;
 }
 
 // ===== PHYSICS UPDATE =====
@@ -412,50 +439,59 @@ function renderGame() {
     const visibleStart = Math.max(0, state.cameraOffset - 150);
     const visibleEnd = Math.min(state.trackLength, state.cameraOffset + 150);
     
-    // Draw terrain segments
-    terrains.forEach(terrain => {
-        if (terrain.end < visibleStart || terrain.start > visibleEnd) return;
-        
-        terrain.slopes.forEach((slope, idx) => {
-            const segmentStart = Math.max(slope.start, visibleStart);
-            const segmentEnd = Math.min(slope.end, visibleEnd);
-            
-            if (segmentEnd <= segmentStart) return;
-            
-            const x1 = (segmentStart - state.cameraOffset + 150) * scale;
-            const x2 = (segmentEnd - state.cameraOffset + 150) * scale;
-            const segmentWidth = x2 - x1;
-            
-            // Calculate heights based on slope
-            const slopeHeight = (segmentEnd - segmentStart) * Math.tan((slope.angle * Math.PI) / 180) * scale;
-            
-            // Draw terrain polygon
-            gameCx.fillStyle = terrain.color;
-            gameCx.beginPath();
-            gameCx.moveTo(x1, groundY);
-            gameCx.lineTo(x2, groundY - slopeHeight);
-            gameCx.lineTo(x2, screenHeight);
-            gameCx.lineTo(x1, screenHeight);
-            gameCx.closePath();
-            gameCx.fill();
-            
-            // Draw terrain border
-            gameCx.strokeStyle = terrain.darkColor;
-            gameCx.lineWidth = 3;
-            gameCx.beginPath();
-            gameCx.moveTo(x1, groundY);
-            gameCx.lineTo(x2, groundY - slopeHeight);
-            gameCx.stroke();
-            
-            // Draw terrain label at segment start
-            if (slope === terrain.slopes[0]) {
-                gameCx.fillStyle = '#000';
-                gameCx.font = 'bold 20px Arial';
-                gameCx.textAlign = 'center';
-                gameCx.fillText(terrain.emoji + ' ' + terrain.name, x1 + 50, groundY - 40);
-            }
-        });
-    });
+    // Draw terrain segments with smooth transitions
+terrains.forEach(terrain => {
+    if (terrain.end < visibleStart || terrain.start > visibleEnd) return;
+    
+    gameCx.fillStyle = terrain.color;
+    gameCx.strokeStyle = terrain.darkColor;
+    gameCx.lineWidth = 3;
+    
+    // Draw continuous terrain path
+    gameCx.beginPath();
+    
+    let startX = Math.max(terrain.start, visibleStart);
+    let startHeight = getTerrainHeightAt(startX);
+    let startScreenX = (startX - state.cameraOffset + 150) * scale;
+    
+    gameCx.moveTo(startScreenX, groundY - startHeight * scale);
+    
+    // Draw smooth line through all segments
+    for (let pos = startX; pos <= Math.min(terrain.end, visibleEnd); pos += 2) {
+        const height = getTerrainHeightAt(pos);
+        const screenX = (pos - state.cameraOffset + 150) * scale;
+        gameCx.lineTo(screenX, groundY - height * scale);
+    }
+    
+    // Close the path to fill
+    let endX = Math.min(terrain.end, visibleEnd);
+    let endScreenX = (endX - state.cameraOffset + 150) * scale;
+    gameCx.lineTo(endScreenX, screenHeight);
+    gameCx.lineTo(startScreenX, screenHeight);
+    gameCx.closePath();
+    
+    gameCx.fill();
+    
+    // Redraw just the top border
+    gameCx.beginPath();
+    gameCx.moveTo(startScreenX, groundY - startHeight * scale);
+    for (let pos = startX; pos <= Math.min(terrain.end, visibleEnd); pos += 2) {
+        const height = getTerrainHeightAt(pos);
+        const screenX = (pos - state.cameraOffset + 150) * scale;
+        gameCx.lineTo(screenX, groundY - height * scale);
+    }
+    gameCx.stroke();
+    
+    // Draw terrain label at segment start
+    if (terrain.start >= visibleStart && terrain.start <= visibleEnd) {
+        const labelX = (terrain.start - state.cameraOffset + 150) * scale;
+        const labelHeight = getTerrainHeightAt(terrain.start);
+        gameCx.fillStyle = '#000';
+        gameCx.font = 'bold 20px Arial';
+        gameCx.textAlign = 'center';
+        gameCx.fillText(terrain.emoji + ' ' + terrain.name, labelX + 50, groundY - labelHeight * scale - 40);
+    }
+});
     
     // Draw distance markers
     gameCx.fillStyle = '#fff';
@@ -473,13 +509,14 @@ function renderGame() {
         gameCx.stroke();
     }
     
-    // Draw car (always centered)
-    const carX = screenWidth / 2;
-    const currentTerrain = getCurrentTerrain();
-    const currentSlope = getCurrentSlope(currentTerrain);
-    const carY = groundY - 25;
-    
-    drawCar(carX, carY, currentSlope);
+    // Draw car (always centered, but at correct height)
+const carX = screenWidth / 2;
+const currentTerrain = getCurrentTerrain();
+const currentSlope = getCurrentSlope(currentTerrain);
+const terrainHeight = getTerrainHeightAt(state.pos);
+const carY = groundY - terrainHeight * scale - 25; // 25 is half the car height
+
+drawCar(carX, carY, currentSlope);
     
     // Update and draw particles
     particles.forEach((p, i) => {
