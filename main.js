@@ -848,12 +848,41 @@ function setupEventListeners() {
 
     document.getElementById('resetBtn')?.addEventListener('click', resetSimulation);
     
+    // Menu Button - Return to Main Menu During Simulation
+    document.getElementById('menuBtn')?.addEventListener('click', () => {
+        // Hide simulation elements
+        const hud = document.getElementById('hud');
+        const controls = document.getElementById('controls');
+        const educationPanel = document.getElementById('educationPanel');
+        
+        if (hud) hud.style.display = 'none';
+        if (controls) controls.style.display = 'none';
+        if (educationPanel) educationPanel.style.display = 'none';
+        
+        // Show main menu
+        const mainMenu = document.getElementById('mainMenu');
+        if (mainMenu) mainMenu.classList.remove('hidden');
+        
+        // Reset the simulation
+        resetSimulation();
+    });
+    
     document.getElementById('restartBtn')?.addEventListener('click', () => {
         document.getElementById('resultsScreen')?.classList.add('hidden');
+        
+        // Show simulation elements again
+        const hud = document.getElementById('hud');
+        const controls = document.getElementById('controls');
+        const educationPanel = document.getElementById('educationPanel');
+        
+        if (hud) hud.style.display = 'flex';
+        if (controls) controls.style.display = 'flex';
+        if (educationPanel) educationPanel.style.display = 'block';
+        
         resetSimulation();
     });
 
-    // Back to Menu Button Logic (Requested in previous step)
+    // Back to Menu Button Logic (From Results Screen)
     document.getElementById('backToMenuBtn')?.addEventListener('click', () => {
         document.getElementById('resultsScreen')?.classList.add('hidden');
         document.getElementById('mainMenu')?.classList.remove('hidden');
@@ -870,11 +899,24 @@ function setupEventListeners() {
         }
     });
 
-    // Menu Control
+    // Menu Control - Show HUD elements when starting simulation
     document.getElementById('startBtn')?.addEventListener('click', () => {
         updatePhysicsConstants();
         updateTerrainStructure();
-        document.getElementById('mainMenu')?.classList.add('hidden');
+        
+        // Hide main menu
+        const mainMenu = document.getElementById('mainMenu');
+        if (mainMenu) mainMenu.classList.add('hidden');
+        
+        // Show simulation elements
+        const hud = document.getElementById('hud');
+        const controls = document.getElementById('controls');
+        const educationPanel = document.getElementById('educationPanel');
+        
+        if (hud) hud.style.display = 'flex';
+        if (controls) controls.style.display = 'flex';
+        if (educationPanel) educationPanel.style.display = 'block';
+        
         resetSimulation();
     });
 
