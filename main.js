@@ -692,7 +692,7 @@ function showResults() {
     if (document.getElementById('finalDistance')) document.getElementById('finalDistance').textContent = state.pos.toFixed(1) + ' m';
     if (document.getElementById('finalTime')) document.getElementById('finalTime').textContent = state.time.toFixed(2) + ' s';
     if (document.getElementById('avgSpeed')) document.getElementById('avgSpeed').textContent = avgSpeed.toFixed(2) + ' m/s';
-    if (document.getElementById('maxSpeed')) document.getElementById('maxSpeed').textContent = state.maxSpeed.toFixed(2) + ' m/s';
+    if (document.getElementById('maxSpeedResult')) document.getElementById('maxSpeedResult').textContent = state.maxSpeed.toFixed(2) + ' m/s';
     
     drawResultsGraph();
     
@@ -726,7 +726,35 @@ function drawResultsGraph() {
         ctx.lineTo(w, y);
         ctx.stroke();
     }
+
+    // Y-axis labels (Speed on left, Position on right)
+ctx.fillStyle = '#fff';
+ctx.font = '12px Arial';
+for (let i = 0; i <= 5; i++) {
+    const y = (i / 5) * h;
     
+    // Speed values (left side, green)
+    const speedValue = (maxV * (5 - i) / 5).toFixed(1);
+    ctx.fillStyle = '#4ade80';
+    ctx.textAlign = 'left';
+    ctx.fillText(speedValue, 5, y + 4);
+    
+    // Position values (right side, blue)
+    const posValue = (maxPos * (5 - i) / 5).toFixed(0);
+    ctx.fillStyle = '#60a5fa';
+    ctx.textAlign = 'right';
+    ctx.fillText(posValue, w - 5, y + 4);
+}
+
+    // X-axis labels (Time at bottom)
+ctx.fillStyle = '#fff';
+ctx.textAlign = 'center';
+for (let i = 0; i <= 5; i++) {
+    const x = (i / 5) * w;
+    const timeValue = (maxT * i / 5).toFixed(1);
+    ctx.fillText(timeValue, x, h - 5);
+}
+
     // Draw speed vs time (Green)
     ctx.strokeStyle = '#4ade80';
     ctx.lineWidth = 3;
@@ -934,4 +962,3 @@ document.addEventListener('DOMContentLoaded', () => {
     requestAnimationFrame(gameLoop);
 
 });
-
