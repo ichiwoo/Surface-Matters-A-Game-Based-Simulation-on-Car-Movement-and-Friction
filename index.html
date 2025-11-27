@@ -1,91 +1,169 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Pixel Physics Car</title>
-  <link rel="stylesheet" href="styles.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Surface Matters: Car Physics Simulation</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- MAIN MENU -->
-  <div id="menuScreen" class="screen">
-    <h1>🚗 PIXEL CAR SIM</h1>
-    <div class="menuBtns">
-      <button id="startBtn" class="btn">🎮 Start Simulation</button>
-      <button id="instrBtn" class="btn">📖 View Instructions</button>
+    <!-- Main Game Container -->
+    <div id="gameContainer">
+        <!-- Sky Background Canvas (Parallax) -->
+        <canvas id="skyCanvas"></canvas>
+        
+        <!-- Main Game Canvas -->
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- HUD Overlay -->
+        <div id="hud">
+            <!-- Speedometer Panel -->
+            <div class="hud-panel" id="speedometerPanel">
+                <canvas id="speedCanvas" width="200" height="200"></canvas>
+                <div id="speedDigital">0 km/h</div>
+            </div>
+            
+            <!-- Terrain Info Panel -->
+            <div class="hud-panel" id="terrainInfo">
+                <div class="terrain-name" id="terrainName">🧊 ICE</div>
+                <div class="stat">
+                    <span class="stat-label">Distance:</span>
+                    <span class="stat-value" id="distanceValue">0 m</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Progress:</span>
+                    <span class="stat-value" id="progressValue">0%</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Time:</span>
+                    <span class="stat-value" id="timeValue">0.0 s</span>
+                </div>
+            </div>
+            
+            <!-- Physics Data Panel -->
+            <div class="hud-panel" id="physicsPanel">
+                <h3>⚙️ Physics Data</h3>
+                <div class="stat">
+                    <span class="stat-label">Speed:</span>
+                    <span class="stat-value" id="speedMs">0.0 m/s</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Acceleration:</span>
+                    <span class="stat-value" id="accelValue">0.0 m/s²</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Friction (μ):</span>
+                    <span class="stat-value" id="frictionValue">0.00</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Slope Angle:</span>
+                    <span class="stat-value" id="slopeValue">0.0°</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Gravity Force:</span>
+                    <span class="stat-value" id="gravityValue">0.0 m/s²</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Education Panel (Right Side) -->
+        <div id="educationPanel" class="hud-panel">
+            <button id="toggleEducation" class="toggle-btn">📚 Hide Info</button>
+            <div id="educationContent">
+                <h3>🔬 Physics of Motion & Friction</h3>
+                <p>
+                    <strong>Friction</strong> is the force that opposes motion between surfaces. 
+                    The friction coefficient (μ) determines how much surfaces resist sliding.
+                </p>
+                
+                <div class="formula">
+                    F<sub>friction</sub> = μ × N × g
+                </div>
+                
+                <p>
+                    <strong>Slope Effects:</strong> When traveling uphill, gravity works against you. 
+                    Downhill, gravity accelerates the vehicle.
+                </p>
+                
+                <div class="formula">
+                    F<sub>gravity</sub> = g × sin(θ)
+                </div>
+                
+                <h3>🏁 Terrain Types</h3>
+                
+                <div class="terrain-card">
+                    <div class="terrain-header">🧊 ICE (0-250m)</div>
+                    <div class="terrain-detail">μ = 0.15 | Low friction</div>
+                    <div class="terrain-detail">Slopes: -3° to +5°</div>
+                </div>
+                
+                <div class="terrain-card">
+                    <div class="terrain-header">🏖️ SAND (250-500m)</div>
+                    <div class="terrain-detail">μ = 0.70 | High friction</div>
+                    <div class="terrain-detail">Slopes: -2° to +4°</div>
+                </div>
+                
+                <div class="terrain-card">
+                    <div class="terrain-header">🪵 WOOD (500-750m)</div>
+                    <div class="terrain-detail">μ = 0.40 | Medium friction</div>
+                    <div class="terrain-detail">Slopes: -4° to +6°</div>
+                </div>
+                
+                <h3>📊 Live Graph</h3>
+                <canvas id="graphCanvas" width="300" height="150"></canvas>
+                
+                <div class="graph-legend">
+                    <div><span class="legend-color" style="background: #4ade80;"></span> Speed</div>
+                    <div><span class="legend-color" style="background: #f59e0b;"></span> Friction</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Control Buttons -->
+        <div id="controls">
+            <button class="control-btn" id="accelerateBtn">⬆️ ACCELERATE (↑)</button>
+            <button class="control-btn" id="brakeBtn">⬇️ BRAKE (↓)</button>
+            <button class="control-btn" id="pauseBtn">⏸️ PAUSE (SPACE)</button>
+            <button class="control-btn" id="resetBtn">🔄 RESET (R)</button>
+        </div>
+        
+        <!-- Results Screen (Hidden Initially) -->
+        <div id="resultsScreen" class="screen hidden">
+            <div class="results-container">
+                <h1>🏁 Simulation Complete!</h1>
+                
+                <div class="results-grid">
+                    <div class="result-card">
+                        <div class="result-label">Total Distance</div>
+                        <div class="result-value" id="finalDistance">750 m</div>
+                    </div>
+                    
+                    <div class="result-card">
+                        <div class="result-label">Total Time</div>
+                        <div class="result-value" id="finalTime">0.0 s</div>
+                    </div>
+                    
+                    <div class="result-card">
+                        <div class="result-label">Average Speed</div>
+                        <div class="result-value" id="avgSpeed">0.0 m/s</div>
+                    </div>
+                    
+                    <div class="result-card">
+                        <div class="result-label">Max Speed</div>
+                        <div class="result-value" id="maxSpeed">0.0 m/s</div>
+                    </div>
+                </div>
+                
+                <h2>📈 Performance Graph</h2>
+                <canvas id="resultsGraph" width="700" height="300"></canvas>
+                
+                <div class="results-actions">
+                    <button class="control-btn" id="restartBtn">🔄 Restart Simulation</button>
+                </div>
+            </div>
+        </div>
     </div>
-    <div class="small">Pixel-style physics demo — use Arrow Keys to control your car!</div>
-  </div>
-
-  <!-- INSTRUCTIONS -->
-  <div id="instructionsScreen" class="screen hidden">
-    <h2>📖 Instructions</h2>
-    <div class="panel">
-      <p><strong>Goal:</strong> Drive along a 300 m track with 3 different surfaces!</p>
-      <ul>
-        <li><strong>🧊 Ice</strong> — Very low friction (μ=0.1), slides easily!</li>
-        <li><strong>🏖️ Sand</strong> — High friction (μ=0.8), slows you down!</li>
-        <li><strong>🪵 Wood</strong> — Medium friction (μ=0.4), balanced surface!</li>
-      </ul>
-      <p><strong>Controls:</strong></p>
-      <ul>
-        <li><strong>↑ Arrow Up</strong> = Accelerate (adds +5 m/s²)</li>
-        <li><strong>↓ Arrow Down</strong> = Brake (adds -8 m/s²)</li>
-        <li><strong>Space</strong> = Pause/Resume simulation</li>
-        <li><strong>R</strong> = Restart from beginning</li>
-      </ul>
-      <p>Watch the physics panel to monitor your speed, position, acceleration, friction coefficient, and slope angle in real-time!</p>
-    </div>
-    <div class="row">
-      <button id="backFromInstr" class="btn">← Back</button>
-    </div>
-  </div>
-
-  <!-- SIMULATION -->
-  <div id="simScreen" class="screen hidden">
-    <div id="topBar">
-      <div id="surfaceLabel">Surface: -</div>
-      <div id="physicsPanel" class="panel">
-        <strong>Speed:</strong> <span id="speedVal">0.00</span> m/s<br>
-        <strong>Position:</strong> <span id="posVal">0.00</span> m<br>
-        <strong>Accel:</strong> <span id="accVal">0.00</span> m/s²<br>
-        <strong>μ (friction):</strong> <span id="muVal">0.00</span><br>
-        <strong>Slope:</strong> <span id="slopeVal">0.0</span>°
-      </div>
-      <div class="controls panel">
-        <button id="accelBtn" class="smallBtn">▲ Accel</button>
-        <button id="brakeBtn" class="smallBtn">▼ Brake</button>
-        <button id="pauseBtn" class="smallBtn">⏸ Pause</button>
-        <button id="restartBtn" class="smallBtn">↻ Restart</button>
-        <button id="toMenuBtn" class="smallBtn">🏠 Menu</button>
-      </div>
-    </div>
-
-    <div id="canvasWrap" class="panel">
-      <canvas id="gameCanvas" width="900" height="240"></canvas>
-      <div id="progressWrap">
-        <label for="progressBar">Track Progress (300m)</label>
-        <progress id="progressBar" value="0" max="300"></progress>
-      </div>
-    </div>
-  </div>
-
-  <!-- RESULTS -->
-  <div id="resultsScreen" class="screen hidden">
-    <h2>🏁 Results</h2>
-    <div class="panel" id="resultsPanel">
-      <div>🎯 Final distance: <span id="finalDistance">0.00</span> m</div>
-      <div>⚡ Final speed: <span id="finalSpeed">0.00</span> m/s</div>
-      <div>⏱️ Time duration: <span id="totalTime">0.00</span> s</div>
-      <div>🐌 Most challenging surface: <span id="worstSurface">-</span></div>
-    </div>
-    <canvas id="resultsGraph" width="700" height="180"></canvas>
-    <div class="row">
-      <button id="backToMenu" class="btn">🏠 Back to Menu</button>
-      <button id="restartFromResults" class="btn">↻ Restart</button>
-    </div>
-  </div>
-
-<script src="main.js"></script>
+    
+    <script src="main.js"></script>
 </body>
 </html>
