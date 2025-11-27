@@ -1,10 +1,12 @@
-// ===== GAME STATE =====
+// ====================================================================
+// ===== GAME STATE & CONSTANTS (Configurable) ========================
+// ====================================================================
 const state = {
     pos: 0,
     vel: 0,
     acc: 0,
     time: 0,
-    trackLength: 750,
+    trackLength: 750, // Calculated dynamically
     paused: false,
     finished: false,
     history: [],
@@ -14,73 +16,52 @@ const state = {
 
 const keys = { up: false, down: false };
 
-// ===== PHYSICS CONSTANTS =====
-const GRAVITY = 9.8;
-const ENGINE_ACC = 6;
+// PHYSICS CONSTANTS - Declared with 'let' for dynamic updating from the menu
+let GRAVITY = 9.8;
+let ENGINE_ACC = 6;
 const BRAKE_ACC = -10;
-const MAX_SPEED = 50;
-const CAR_MASS = 1000; // kg
+let MAX_SPEED = 50;
+let CAR_MASS = 1000; // kg
 
-// ===== TERRAIN DEFINITIONS =====
-const terrains = [
-    {
-        name: 'ICE',
-        emoji: '🧊',
-        start: 0,
-        end: 250,
-        baseMu: 0.15,
-        color: '#a5f3fc',
-        darkColor: '#06b6d4',
-        slopes: [
-            { start: 0, end: 80, angle: 0 },
-            { start: 80, end: 120, angle: -3 },
-            { start: 120, end: 180, angle: 2 },
-            { start: 180, end: 250, angle: 5 }
-        ]
-    },
-    {
-        name: 'SAND',
-        emoji: '🏖️',
-        start: 250,
-        end: 500,
-        baseMu: 0.70,
-        color: '#fde047',
-        darkColor: '#eab308',
-        slopes: [
-            { start: 250, end: 320, angle: 0 },
-            { start: 320, end: 380, angle: 4 },
-            { start: 380, end: 440, angle: -2 },
-            { start: 440, end: 500, angle: 2 }
-        ]
-    },
-    {
-        name: 'WOOD',
-        emoji: '🪵',
-        start: 500,
-        end: 750,
-        baseMu: 0.40,
-        color: '#d97706',
-        darkColor: '#92400e',
-        slopes: [
-            { start: 500, end: 580, angle: 0 },
-            { start: 580, end: 640, angle: -4 },
-            { start: 640, end: 690, angle: 6 },
-            { start: 690, end: 750, angle: 1 }
-        ]
-    }
+// Base Slope Profile (used for proportional scaling)
+const BASE_SLOPES = {
+    ICE: [
+        { angle: 0, length: 50 }, { angle: -5, length: 50 }, { angle: -7, length: 50 },
+        { angle: 3, length: 50 }, { angle: 8, length: 50 }
+    ],
+    SAND: [
+        { angle: 4, length: 50 }, { angle: 9, length: 50 }, { angle: 0, length: 50 },
+        { angle: -6, length: 50 }, { angle: 5, length: 50 }
+    ],
+    WOOD: [
+        { angle: -3, length: 50 }, { angle: -8, length: 50 }, { angle: 6, length: 50 },
+        { angle: 10, length: 50 }, { angle: 2, length: 50 }
+    ]
+};
+
+// TERRAIN DEFINITIONS - Will be updated with calculated start/end points
+let terrains = [
+    { name: 'ICE', emoji: '🧊', length: 250, baseMu: 0.15, color: '#a5f3fc', darkColor: '#06b6d4', slopes: [] },
+    { name: 'SAND', emoji: '🏖️', length: 250, baseMu: 0.70, color: '#fde047', darkColor: '#eab308', slopes: [] },
+    { name: 'WOOD', emoji: '🪵', length: 250, baseMu: 0.40, color: '#d97706', darkColor: '#92400e', slopes: [] }
 ];
 
-// ===== CANVAS & CONTEXT =====
+// ===== CANVAS & CONTEXT (Defensive lookup) =====
 const skyCanvas = document.getElementById('skyCanvas');
-const skyCx = skyCanvas.getContext('2d');
+const skyCx = skyCanvas ? skyCanvas.getContext('2d') : null;
 const gameCanvas = document.getElementById('gameCanvas');
-const gameCx = gameCanvas.getContext('2d');
+const gameCx = gameCanvas ? gameCanvas.getContext('2d') : null;
 const speedCanvas = document.getElementById('speedCanvas');
-const speedCx = speedCanvas.getContext('2d');
+const speedCx = speedCanvas ? speedCanvas.getContext('2d') : null;
 const graphCanvas = document.getElementById('graphCanvas');
-const graphCx = graphCanvas.getContext('2d');
+const graphCx = graphCanvas ? graphCanvas.getContext('2d') : null;
+const gravityValueDisplay = document.getElementById('gravityValueDisplay');
 
-// ===== CLOUD SYSTEM =====
+if (!skyCx || !gameCx || !speedCx || !graphCx) {
+    console.error("Critical Error: One or more canvas elements or their contexts were not found. Ensure all canvas IDs (skyCanvas, gameCanvas, speedCanvas, graphCanvas) are correct in index.html.");
+}
+
+// ===== CLOUD & PARTICLE SYSTEMS =====
 const clouds = [];
 for (let i = 0; i < 15; i++) {
     clouds.push({
@@ -90,11 +71,10 @@ for (let i = 0; i < 15; i++) {
         speed: 0.1 + Math.random() * 0.3
     });
 }
-
-// ===== PARTICLE SYSTEM =====
 const particles = [];
 
 function createParticles(x, y, color, count = 5) {
+    if (!gameCx) return;
     for (let i = 0; i < count; i++) {
         particles.push({
             x: x,
@@ -108,18 +88,141 @@ function createParticles(x, y, color, count = 5) {
     }
 }
 
-// ===== RESIZE HANDLER =====
+// ===== CANVAS & INPUT HELPERS =====
 function resizeCanvas() {
-    skyCanvas.width = window.innerWidth;
-    skyCanvas.height = window.innerHeight;
-    gameCanvas.width = window.innerWidth;
-    gameCanvas.height = window.innerHeight;
+    if (skyCanvas) skyCanvas.width = window.innerWidth;
+    if (skyCanvas) skyCanvas.height = window.innerHeight;
+    if (gameCanvas) gameCanvas.width = window.innerWidth;
+    if (gameCanvas) gameCanvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+
+/**
+ * Reads and validates a numeric input field, clamping to a minimum value.
+ */
+function getValidatedInput(id, minVal, defaultVal) {
+    const inputEl = document.getElementById(id);
+    if (!inputEl) return defaultVal;
+
+    let value = parseFloat(inputEl.value);
+
+    if (isNaN(value) || value < minVal) {
+        inputEl.value = minVal > 0 ? minVal.toFixed(2) : defaultVal.toFixed(2);
+        return minVal > 0 ? minVal : defaultVal;
+    }
+
+    return value;
 }
 
-window.addEventListener('resize', resizeCanvas);
-resizeCanvas();
+function updatePhysicsConstants() {
+    GRAVITY = getValidatedInput('gravityValue', 0.1, 9.8);
+    ENGINE_ACC = getValidatedInput('engineAccel', 1, 6);
+    CAR_MASS = getValidatedInput('carMass', 500, 1000);
+    MAX_SPEED = getValidatedInput('maxSpeed', 10, 50);
+}
 
-// ===== TERRAIN HELPERS =====
+function updateTrackInputVisibility() {
+    const equalToggle = document.getElementById('equalLengthToggle');
+    if (!equalToggle) return;
+
+    const isTotalLength = equalToggle.checked;
+    
+    // Defensive check for input containers
+    const iceLengthDiv = document.getElementById('iceLength');
+    const sandLengthDiv = document.getElementById('sandLength');
+    const woodLengthDiv = document.getElementById('woodLength');
+    const totalTrackDiv = document.getElementById('totalTrackLength'); // Assuming this is the input container's parent or the input itself
+
+    if (iceLengthDiv) iceLengthDiv.style.display = isTotalLength ? 'none' : 'flex';
+    if (sandLengthDiv) sandLengthDiv.style.display = isTotalLength ? 'none' : 'flex';
+    if (woodLengthDiv) woodLengthDiv.style.display = isTotalLength ? 'none' : 'flex';
+
+    // The totalTrackLength input is contained in a wrapper (e.g., div.input-group)
+    if (totalTrackDiv && totalTrackDiv.parentElement) {
+        totalTrackDiv.parentElement.style.display = isTotalLength ? 'flex' : 'none';
+    }
+}
+
+function updateTerrainStructure() {
+    const equalToggle = document.getElementById('equalLengthToggle');
+    const isTotalLength = equalToggle ? equalToggle.checked : false; // Default to false if missing
+
+    let lengthIce, lengthSand, lengthWood;
+    const minSegmentLength = 50;
+
+    if (isTotalLength) {
+        const totalLength = getValidatedInput('totalTrackLength', 300, 750);
+        const equalLength = Math.max(minSegmentLength, Math.floor(totalLength / 3));
+        lengthIce = lengthSand = lengthWood = equalLength;
+    } else {
+        lengthIce = getValidatedInput('iceLengthInput', minSegmentLength, 250);
+        lengthSand = getValidatedInput('sandLengthInput', minSegmentLength, 250);
+        lengthWood = getValidatedInput('woodLengthInput', minSegmentLength, 250);
+    }
+
+    const newLengths = [
+        { name: 'ICE', length: lengthIce },
+        { name: 'SAND', length: lengthSand },
+        { name: 'WOOD', length: lengthWood }
+    ];
+
+    let currentPos = 0;
+    
+    terrains = terrains.map((terrain, index) => {
+        const newLength = newLengths[index].length;
+        const baseSlopes = BASE_SLOPES[terrain.name];
+        // 250 is the base length for all slope profiles
+        const baseTotalLength = 250; 
+        const scaleFactor = newLength / baseTotalLength;
+        
+        let segmentStart = currentPos;
+        const newSlopes = [];
+
+        // Scale and shift slopes proportionally
+        let baseSlopeStart = 0;
+        baseSlopes.forEach(baseSlope => {
+            const baseLength = baseSlope.length; // 50m for each segment
+            const newSlopeLength = baseLength * scaleFactor;
+
+            newSlopes.push({
+                start: segmentStart,
+                end: segmentStart + newSlopeLength,
+                angle: baseSlope.angle
+            });
+            segmentStart += newSlopeLength;
+        });
+
+        const newTerrain = {
+            ...terrain,
+            length: newLength,
+            start: currentPos,
+            end: currentPos + newLength,
+            slopes: newSlopes
+        };
+        
+        currentPos = newTerrain.end;
+        return newTerrain;
+    });
+
+    state.trackLength = currentPos;
+}
+
+function applyPreset(presetName) {
+    const presets = {
+        'Earth': { gravity: 9.81, accel: 6, mass: 1000, maxSpeed: 50 },
+        'Moon': { gravity: 1.62, accel: 8, mass: 800, maxSpeed: 60 },
+        'Mars': { gravity: 3.71, accel: 5, mass: 1200, maxSpeed: 40 },
+        'Performance': { gravity: 9.81, accel: 15, mass: 700, maxSpeed: 100 }
+    };
+    
+    const preset = presets[presetName] || presets['Earth'];
+
+    if (document.getElementById('gravityValue')) document.getElementById('gravityValue').value = preset.gravity.toFixed(2);
+    if (document.getElementById('engineAccel')) document.getElementById('engineAccel').value = preset.accel.toFixed(2);
+    if (document.getElementById('carMass')) document.getElementById('carMass').value = preset.mass.toFixed(0);
+    if (document.getElementById('maxSpeed')) document.getElementById('maxSpeed').value = preset.maxSpeed.toFixed(0);
+}
+
 function getCurrentTerrain() {
     return terrains.find(t => state.pos >= t.start && state.pos < t.end) || terrains[terrains.length - 1];
 }
@@ -129,7 +232,36 @@ function getCurrentSlope(terrain) {
     return slope ? slope.angle : 0;
 }
 
-// ===== PHYSICS UPDATE =====
+function getTerrainHeightAt(position) {
+    if (position <= 0) return 0;
+
+    let accumulatedHeight = 0;
+    
+    for (const terrain of terrains) {
+        if (position < terrain.start) break;
+
+        for (const slope of terrain.slopes) {
+            
+            if (position <= slope.start) {
+                break; 
+            } else if (position >= slope.end) {
+                const segmentLength = slope.end - slope.start;
+                accumulatedHeight += segmentLength * Math.tan((slope.angle * Math.PI) / 180);
+            } else {
+                const distanceInSlope = position - slope.start;
+                accumulatedHeight += distanceInSlope * Math.tan((slope.angle * Math.PI) / 180);
+                return accumulatedHeight;
+            }
+        }
+    }
+    
+    return accumulatedHeight;
+}
+
+// ====================================================================
+// ===== PHYSICS & UI UPDATE ==========================================
+// ====================================================================
+
 function updatePhysics(dt) {
     if (state.paused || state.finished) return;
     
@@ -137,30 +269,27 @@ function updatePhysics(dt) {
     const slopeAngle = getCurrentSlope(terrain);
     const mu = terrain.baseMu;
     
-    // Calculate acceleration components
     let acc = 0;
     
-    // Engine force
     if (keys.up) {
         acc += ENGINE_ACC;
     }
-    
-    // Brake force
     if (keys.down) {
         acc += BRAKE_ACC;
     }
     
-    // Friction force (opposes motion)
+    const angleRad = (slopeAngle * Math.PI) / 180;
+    
+    // Friction
     if (Math.abs(state.vel) > 0.01) {
-        const frictionForce = mu * GRAVITY * Math.sign(state.vel);
-        acc -= frictionForce;
+        const frictionAcc = mu * GRAVITY * Math.cos(angleRad) * Math.sign(state.vel);
+        acc -= frictionAcc;
     }
     
-    // Gravity component on slope (negative angle = downhill helps, positive = uphill resists)
-    const gravityComponent = GRAVITY * Math.sin((slopeAngle * Math.PI) / 180);
+    // Gravity component on slope
+    const gravityComponent = GRAVITY * Math.sin(angleRad);
     acc -= gravityComponent;
     
-    // Update velocity
     state.acc = acc;
     state.vel += acc * dt;
     
@@ -168,14 +297,12 @@ function updatePhysics(dt) {
     if (state.vel < 0) state.vel = 0;
     if (state.vel > MAX_SPEED) state.vel = MAX_SPEED;
     
-    // Track max speed
+    // Max Speed Tracking
     if (state.vel > state.maxSpeed) state.maxSpeed = state.vel;
     
-    // Update position
     state.pos += state.vel * dt;
     state.time += dt;
     
-    // Create particles when moving
     if (state.vel > 1 && Math.random() < 0.3) {
         const carScreenX = gameCanvas.width / 2;
         const carScreenY = gameCanvas.height * 0.7;
@@ -190,7 +317,7 @@ function updatePhysics(dt) {
         showResults();
     }
     
-    // Record history for graphs
+    // Record history
     if (state.history.length === 0 || state.time - state.history[state.history.length - 1].t > 0.2) {
         state.history.push({
             t: state.time,
@@ -201,45 +328,37 @@ function updatePhysics(dt) {
         });
     }
     
-    // Update camera (smooth follow)
+    // Camera follow
     const targetOffset = state.pos;
     state.cameraOffset += (targetOffset - state.cameraOffset) * 0.1;
     
     updateUI(terrain, mu, slopeAngle, gravityComponent);
 }
 
-// ===== UI UPDATE =====
 function updateUI(terrain, mu, slopeAngle, gravityForce) {
-    // Terrain name
-    document.getElementById('terrainName').textContent = `${terrain.emoji} ${terrain.name}`;
+    if (document.getElementById('terrainName')) document.getElementById('terrainName').textContent = `${terrain.emoji} ${terrain.name}`;
+    if (document.getElementById('distanceValue')) document.getElementById('distanceValue').textContent = state.pos.toFixed(1) + ' m';
+    if (document.getElementById('progressValue')) document.getElementById('progressValue').textContent = ((state.pos / state.trackLength) * 100).toFixed(1) + '%';
+    if (document.getElementById('timeValue')) document.getElementById('timeValue').textContent = state.time.toFixed(1) + ' s';
+    if (document.getElementById('speedMs')) document.getElementById('speedMs').textContent = state.vel.toFixed(2) + ' m/s';
+    if (document.getElementById('accelValue')) document.getElementById('accelValue').textContent = state.acc.toFixed(2) + ' m/s²';
+    if (document.getElementById('frictionValue')) document.getElementById('frictionValue').textContent = mu.toFixed(2);
+    if (document.getElementById('slopeValue')) document.getElementById('slopeValue').textContent = slopeAngle.toFixed(1) + '°';
+    if (gravityValueDisplay) gravityValueDisplay.textContent = gravityForce.toFixed(2) + ' m/s²'; 
     
-    // Distance and progress
-    document.getElementById('distanceValue').textContent = state.pos.toFixed(1) + ' m';
-    document.getElementById('progressValue').textContent = ((state.pos / state.trackLength) * 100).toFixed(1) + '%';
-    
-    // Time
-    document.getElementById('timeValue').textContent = state.time.toFixed(1) + ' s';
-    
-    // Physics data
-    document.getElementById('speedMs').textContent = state.vel.toFixed(2) + ' m/s';
-    document.getElementById('accelValue').textContent = state.acc.toFixed(2) + ' m/s²';
-    document.getElementById('frictionValue').textContent = mu.toFixed(2);
-    document.getElementById('slopeValue').textContent = slopeAngle.toFixed(1) + '°';
-    document.getElementById('gravityValue').textContent = gravityForce.toFixed(2) + ' m/s²';
-    
-    // Speedometer digital display
     const speedKmh = state.vel * 3.6;
-    document.getElementById('speedDigital').textContent = speedKmh.toFixed(0) + ' km/h';
+    if (document.getElementById('speedDigital')) document.getElementById('speedDigital').textContent = speedKmh.toFixed(0) + ' km/h';
     
-    // Draw speedometer gauge
     drawSpeedometer(speedKmh);
-    
-    // Update live graph
     drawLiveGraph();
 }
 
-// ===== SPEEDOMETER DRAWING =====
+// ====================================================================
+// ===== RENDERING FUNCTIONS (Fully Defined) ==========================
+// ====================================================================
+
 function drawSpeedometer(speedKmh) {
+    if (!speedCx || !speedCanvas) return;
     const cx = speedCanvas.width / 2;
     const cy = speedCanvas.height / 2;
     const radius = 80;
@@ -311,8 +430,9 @@ function drawSpeedometer(speedKmh) {
     speedCx.stroke();
 }
 
-// ===== LIVE GRAPH =====
 function drawLiveGraph() {
+    if (!graphCx || !graphCanvas) return;
+
     const w = graphCanvas.width;
     const h = graphCanvas.height;
     
@@ -361,8 +481,8 @@ function drawLiveGraph() {
     graphCx.stroke();
 }
 
-// ===== SKY RENDERING =====
 function renderSky() {
+    if (!skyCx || !skyCanvas) return;
     // Sky gradient
     const gradient = skyCx.createLinearGradient(0, 0, 0, skyCanvas.height);
     gradient.addColorStop(0, '#87CEEB');
@@ -390,6 +510,7 @@ function renderSky() {
 }
 
 function drawCloud(x, y, scale) {
+    if (!skyCx) return;
     skyCx.fillStyle = 'rgba(255, 255, 255, 0.8)';
     skyCx.beginPath();
     skyCx.arc(x, y, 30 * scale, 0, Math.PI * 2);
@@ -399,8 +520,9 @@ function drawCloud(x, y, scale) {
     skyCx.fill();
 }
 
-// ===== GAME RENDERING =====
 function renderGame() {
+    if (!gameCx || !gameCanvas) return;
+
     gameCx.clearRect(0, 0, gameCanvas.width, gameCanvas.height);
     
     const screenWidth = gameCanvas.width;
@@ -412,49 +534,63 @@ function renderGame() {
     const visibleStart = Math.max(0, state.cameraOffset - 150);
     const visibleEnd = Math.min(state.trackLength, state.cameraOffset + 150);
     
-    // Draw terrain segments
+    // Draw terrain segments with smooth transitions
     terrains.forEach(terrain => {
         if (terrain.end < visibleStart || terrain.start > visibleEnd) return;
         
-        terrain.slopes.forEach((slope, idx) => {
-            const segmentStart = Math.max(slope.start, visibleStart);
-            const segmentEnd = Math.min(slope.end, visibleEnd);
-            
-            if (segmentEnd <= segmentStart) return;
-            
-            const x1 = (segmentStart - state.cameraOffset + 150) * scale;
-            const x2 = (segmentEnd - state.cameraOffset + 150) * scale;
-            const segmentWidth = x2 - x1;
-            
-            // Calculate heights based on slope
-            const slopeHeight = (segmentEnd - segmentStart) * Math.tan((slope.angle * Math.PI) / 180) * scale;
-            
-            // Draw terrain polygon
-            gameCx.fillStyle = terrain.color;
-            gameCx.beginPath();
-            gameCx.moveTo(x1, groundY);
-            gameCx.lineTo(x2, groundY - slopeHeight);
-            gameCx.lineTo(x2, screenHeight);
-            gameCx.lineTo(x1, screenHeight);
-            gameCx.closePath();
-            gameCx.fill();
-            
-            // Draw terrain border
-            gameCx.strokeStyle = terrain.darkColor;
-            gameCx.lineWidth = 3;
-            gameCx.beginPath();
-            gameCx.moveTo(x1, groundY);
-            gameCx.lineTo(x2, groundY - slopeHeight);
-            gameCx.stroke();
-            
-            // Draw terrain label at segment start
-            if (slope === terrain.slopes[0]) {
-                gameCx.fillStyle = '#000';
-                gameCx.font = 'bold 20px Arial';
-                gameCx.textAlign = 'center';
-                gameCx.fillText(terrain.emoji + ' ' + terrain.name, x1 + 50, groundY - 40);
-            }
-        });
+        let startX = Math.max(terrain.start, visibleStart);
+        let endX = Math.min(terrain.end, visibleEnd);
+        
+        gameCx.fillStyle = terrain.color;
+        gameCx.strokeStyle = terrain.darkColor;
+        gameCx.lineWidth = 3;
+        
+        gameCx.beginPath();
+        
+        let startHeight = getTerrainHeightAt(startX);
+        let startScreenX = (startX - state.cameraOffset + 150) * scale;
+        
+        gameCx.moveTo(startScreenX, screenHeight); // Bottom-left corner
+        gameCx.lineTo(startScreenX, groundY - startHeight * scale); // Top-left corner (start of slope)
+
+        // Draw smooth line through the segment using small steps (2m)
+        const step = 2;
+        for (let pos = startX; pos <= endX + step; pos += step) {
+            const actualPos = Math.min(pos, endX);
+            const height = getTerrainHeightAt(actualPos);
+            const screenX = (actualPos - state.cameraOffset + 150) * scale;
+            gameCx.lineTo(screenX, groundY - height * scale);
+        }
+        
+        let endHeight = getTerrainHeightAt(endX);
+        let endScreenX = (endX - state.cameraOffset + 150) * scale;
+        
+        gameCx.lineTo(endScreenX, groundY - endHeight * scale);
+        gameCx.lineTo(endScreenX, screenHeight); // Bottom-right corner
+        gameCx.closePath();
+        
+        gameCx.fill();
+        
+        // Redraw just the top border
+        gameCx.beginPath();
+        gameCx.moveTo(startScreenX, groundY - startHeight * scale);
+        for (let pos = startX; pos <= endX + step; pos += step) {
+            const actualPos = Math.min(pos, endX);
+            const height = getTerrainHeightAt(actualPos);
+            const screenX = (actualPos - state.cameraOffset + 150) * scale;
+            gameCx.lineTo(screenX, groundY - height * scale);
+        }
+        gameCx.stroke();
+        
+        // Draw terrain label
+        if (terrain.start >= visibleStart && terrain.start <= visibleEnd) {
+            const labelX = (terrain.start - state.cameraOffset + 150) * scale;
+            const labelHeight = getTerrainHeightAt(terrain.start);
+            gameCx.fillStyle = '#000';
+            gameCx.font = 'bold 20px Arial';
+            gameCx.textAlign = 'center';
+            gameCx.fillText(terrain.emoji + ' ' + terrain.name, labelX + 50, groundY - labelHeight * scale - 40);
+        }
     });
     
     // Draw distance markers
@@ -463,22 +599,26 @@ function renderGame() {
     gameCx.textAlign = 'center';
     for (let i = Math.floor(visibleStart / 50) * 50; i <= visibleEnd; i += 50) {
         const x = (i - state.cameraOffset + 150) * scale;
-        gameCx.fillText(i + 'm', x, groundY - 10);
+        const currentHeight = getTerrainHeightAt(i);
+        const y = groundY - currentHeight * scale;
+        
+        gameCx.fillText(i + 'm', x, y - 10);
         
         gameCx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
         gameCx.lineWidth = 2;
         gameCx.beginPath();
-        gameCx.moveTo(x, groundY);
-        gameCx.lineTo(x, groundY + 10);
+        gameCx.moveTo(x, y);
+        gameCx.lineTo(x, y + 10);
         gameCx.stroke();
     }
     
-    // Draw car (always centered)
+    // Draw car
     const carX = screenWidth / 2;
     const currentTerrain = getCurrentTerrain();
     const currentSlope = getCurrentSlope(currentTerrain);
-    const carY = groundY - 25;
-    
+    const terrainHeight = getTerrainHeightAt(state.pos);
+    const carY = groundY - terrainHeight * scale - 25;
+
     drawCar(carX, carY, currentSlope);
     
     // Update and draw particles
@@ -501,6 +641,7 @@ function renderGame() {
 }
 
 function drawCar(x, y, slopeAngle) {
+    if (!gameCx) return;
     gameCx.save();
     gameCx.translate(x, y);
     gameCx.rotate((slopeAngle * Math.PI) / 180);
@@ -543,33 +684,36 @@ function drawCar(x, y, slopeAngle) {
     gameCx.restore();
 }
 
-// ===== RESULTS SCREEN =====
+// ===== RESULTS & GRAPHS =====
+
 function showResults() {
-    const avgSpeed = state.trackLength / state.time;
+    const avgSpeed = state.time > 0 ? state.trackLength / state.time : 0;
     
-    document.getElementById('finalDistance').textContent = state.pos.toFixed(1) + ' m';
-    document.getElementById('finalTime').textContent = state.time.toFixed(2) + ' s';
-    document.getElementById('avgSpeed').textContent = avgSpeed.toFixed(2) + ' m/s';
-    document.getElementById('maxSpeed').textContent = state.maxSpeed.toFixed(2) + ' m/s';
+    if (document.getElementById('finalDistance')) document.getElementById('finalDistance').textContent = state.pos.toFixed(1) + ' m';
+    if (document.getElementById('finalTime')) document.getElementById('finalTime').textContent = state.time.toFixed(2) + ' s';
+    if (document.getElementById('avgSpeed')) document.getElementById('avgSpeed').textContent = avgSpeed.toFixed(2) + ' m/s';
+    if (document.getElementById('maxSpeed')) document.getElementById('maxSpeed').textContent = state.maxSpeed.toFixed(2) + ' m/s';
     
     drawResultsGraph();
     
-    document.getElementById('resultsScreen').classList.remove('hidden');
+    if (document.getElementById('resultsScreen')) document.getElementById('resultsScreen').classList.remove('hidden');
 }
 
 function drawResultsGraph() {
+    if (!graphCx || !graphCanvas) return;
     const canvas = document.getElementById('resultsGraph');
     const ctx = canvas.getContext('2d');
     const w = canvas.width;
     const h = canvas.height;
     
+    ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.fillRect(0, 0, w, h);
     
     if (state.history.length < 2) return;
     
     const maxT = state.history[state.history.length - 1].t;
-    const maxV = Math.max(...state.history.map(p => p.vel));
+    const maxV = Math.max(...state.history.map(p => p.vel), MAX_SPEED * 1.05, 10); 
     const maxPos = state.trackLength;
     
     // Draw grid
@@ -583,7 +727,7 @@ function drawResultsGraph() {
         ctx.stroke();
     }
     
-    // Draw speed vs time
+    // Draw speed vs time (Green)
     ctx.strokeStyle = '#4ade80';
     ctx.lineWidth = 3;
     ctx.beginPath();
@@ -595,7 +739,7 @@ function drawResultsGraph() {
     });
     ctx.stroke();
     
-    // Draw position vs time
+    // Draw position vs time (Blue Dashed)
     ctx.strokeStyle = '#60a5fa';
     ctx.lineWidth = 2;
     ctx.setLineDash([5, 5]);
@@ -609,49 +753,34 @@ function drawResultsGraph() {
     ctx.stroke();
     ctx.setLineDash([]);
     
-    // Labels
+    // Add Axis Labels (Requested in previous step)
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 16px Arial';
-    ctx.fillText('Speed vs Time', 10, 25);
+    ctx.font = 'bold 14px Arial';
+    
+    // X-Axis Label (Time)
+    ctx.textAlign = 'center';
+    ctx.fillText('Time (s)', w / 2, h - 5);
+    
+    ctx.save();
+    
+    // Y-Axis Labels
+    // Speed (Left Axis)
+    ctx.textAlign = 'left';
     ctx.fillStyle = '#4ade80';
-    ctx.fillText(`Max Speed: ${maxV.toFixed(1)} m/s`, 10, 50);
-    ctx.fillStyle = '#60a5fa';
-    ctx.fillText('— Position', 10, 70);
-    ctx.fillStyle = '#fff';
-    ctx.font = '14px Arial';
+    ctx.fillText(`Speed (m/s)`, 5, 20);
+    
+    // Position (Right Axis)
+    ctx.translate(w, 0);
     ctx.textAlign = 'right';
-    ctx.fillText(`Total Time: ${maxT.toFixed(1)} s`, w - 10, 25);
+    ctx.fillStyle = '#60a5fa';
+    ctx.fillText(`Position (m)`, -5, 20);
+    
+    ctx.restore();
 }
 
-// ===== CONTROLS =====
-document.getElementById('accelerateBtn').addEventListener('click', () => {
-    keys.up = !keys.up;
-    document.getElementById('accelerateBtn').classList.toggle('active', keys.up);
-});
-
-document.getElementById('brakeBtn').addEventListener('click', () => {
-    keys.down = !keys.down;
-    document.getElementById('brakeBtn').classList.toggle('active', keys.down);
-});
-
-document.getElementById('pauseBtn').addEventListener('click', () => {
-    state.paused = !state.paused;
-    document.getElementById('pauseBtn').textContent = state.paused ? '▶️ RESUME (SPACE)' : '⏸️ PAUSE (SPACE)';
-});
-
-document.getElementById('resetBtn').addEventListener('click', resetSimulation);
-document.getElementById('restartBtn').addEventListener('click', () => {
-    document.getElementById('resultsScreen').classList.add('hidden');
-    resetSimulation();
-});
-
-document.getElementById('toggleEducation').addEventListener('click', () => {
-    const content = document.getElementById('educationContent');
-    const btn = document.getElementById('toggleEducation');
-    const isHidden = content.style.display === 'none';
-    content.style.display = isHidden ? 'block' : 'none';
-    btn.textContent = isHidden ? '📚 Hide Info' : '📚 Show Info';
-});
+// ====================================================================
+// ===== CONTROLS & INIT ==============================================
+// ====================================================================
 
 function resetSimulation() {
     state.pos = 0;
@@ -666,24 +795,90 @@ function resetSimulation() {
     keys.up = false;
     keys.down = false;
     particles.length = 0;
-    document.getElementById('accelerateBtn').classList.remove('active');
-    document.getElementById('brakeBtn').classList.remove('active');
-    document.getElementById('pauseBtn').textContent = '⏸️ PAUSE (SPACE)';
+    
+    if (document.getElementById('accelerateBtn')) document.getElementById('accelerateBtn').classList.remove('active');
+    if (document.getElementById('brakeBtn')) document.getElementById('brakeBtn').classList.remove('active');
+    if (document.getElementById('pauseBtn')) document.getElementById('pauseBtn').textContent = '⏸️ PAUSE (SPACE)';
+}
+
+function setupEventListeners() {
+    // Basic Controls
+    document.getElementById('accelerateBtn')?.addEventListener('click', () => {
+        keys.up = !keys.up;
+        document.getElementById('accelerateBtn').classList.toggle('active', keys.up);
+    });
+
+    document.getElementById('brakeBtn')?.addEventListener('click', () => {
+        keys.down = !keys.down;
+        document.getElementById('brakeBtn').classList.toggle('active', keys.down);
+    });
+
+    document.getElementById('pauseBtn')?.addEventListener('click', () => {
+        state.paused = !state.paused;
+        document.getElementById('pauseBtn').textContent = state.paused ? '▶️ RESUME (SPACE)' : '⏸️ PAUSE (SPACE)';
+    });
+
+    document.getElementById('resetBtn')?.addEventListener('click', resetSimulation);
+    
+    document.getElementById('restartBtn')?.addEventListener('click', () => {
+        document.getElementById('resultsScreen')?.classList.add('hidden');
+        resetSimulation();
+    });
+
+    // Back to Menu Button Logic (Requested in previous step)
+    document.getElementById('backToMenuBtn')?.addEventListener('click', () => {
+        document.getElementById('resultsScreen')?.classList.add('hidden');
+        document.getElementById('mainMenu')?.classList.remove('hidden');
+        resetSimulation();
+    });
+
+    document.getElementById('toggleEducation')?.addEventListener('click', () => {
+        const content = document.getElementById('educationContent');
+        const btn = document.getElementById('toggleEducation');
+        if (content && btn) {
+            const isHidden = content.style.display === 'none';
+            content.style.display = isHidden ? 'block' : 'none';
+            btn.textContent = isHidden ? '📚 Hide Info' : '📚 Show Info';
+        }
+    });
+
+    // Menu Control
+    document.getElementById('startBtn')?.addEventListener('click', () => {
+        updatePhysicsConstants();
+        updateTerrainStructure();
+        document.getElementById('mainMenu')?.classList.add('hidden');
+        resetSimulation();
+    });
+
+    // Track Configuration Toggle
+    const equalToggle = document.getElementById('equalLengthToggle');
+    equalToggle?.addEventListener('change', updateTrackInputVisibility);
+    document.getElementById('totalTrackLength')?.addEventListener('change', () => {
+        if (equalToggle && equalToggle.checked) {
+            updateTerrainStructure();
+        }
+    });
+
+    // Preset Buttons
+    document.getElementById('presetEarth')?.addEventListener('click', () => applyPreset('Earth'));
+    document.getElementById('presetMoon')?.addEventListener('click', () => applyPreset('Moon'));
+    document.getElementById('presetMars')?.addEventListener('click', () => applyPreset('Mars'));
+    document.getElementById('presetCustom')?.addEventListener('click', () => applyPreset('Performance'));
 }
 
 // ===== KEYBOARD CONTROLS =====
 window.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowUp') {
         keys.up = true;
-        document.getElementById('accelerateBtn').classList.add('active');
+        document.getElementById('accelerateBtn')?.classList.add('active');
     }
     if (e.key === 'ArrowDown') {
         keys.down = true;
-        document.getElementById('brakeBtn').classList.add('active');
+        document.getElementById('brakeBtn')?.classList.add('active');
     }
     if (e.key === ' ') {
         e.preventDefault();
-        document.getElementById('pauseBtn').click();
+        document.getElementById('pauseBtn')?.click();
     }
     if (e.key === 'r' || e.key === 'R') {
         resetSimulation();
@@ -693,18 +888,19 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => {
     if (e.key === 'ArrowUp') {
         keys.up = false;
-        document.getElementById('accelerateBtn').classList.remove('active');
+        document.getElementById('accelerateBtn')?.classList.remove('active');
     }
     if (e.key === 'ArrowDown') {
         keys.down = false;
-        document.getElementById('brakeBtn').classList.remove('active');
+        document.getElementById('brakeBtn')?.classList.remove('active');
     }
 });
 
 // ===== GAME LOOP =====
 let lastTime = 0;
 function gameLoop(timestamp) {
-    const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+    // Clamp delta time to prevent physics instability from large gaps
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.1); 
     lastTime = timestamp;
     
     if (!state.finished) {
@@ -713,8 +909,27 @@ function gameLoop(timestamp) {
     
     renderSky();
     renderGame();
-    
+
     requestAnimationFrame(gameLoop);
 }
 
-requestAnimationFrame(gameLoop);
+// Initialization on load
+document.addEventListener('DOMContentLoaded', () => {
+    // Initial setup of physics values in UI
+    if (document.getElementById('gravityValue')) document.getElementById('gravityValue').value = GRAVITY.toFixed(2);
+    if (document.getElementById('engineAccel')) document.getElementById('engineAccel').value = ENGINE_ACC.toFixed(2);
+    if (document.getElementById('carMass')) document.getElementById('carMass').value = CAR_MASS.toFixed(0);
+    if (document.getElementById('maxSpeed')) document.getElementById('maxSpeed').value = MAX_SPEED.toFixed(0);
+    
+    // Initial setup of track lengths (assuming default 250m inputs exist)
+    if (document.getElementById('iceLengthInput')) document.getElementById('iceLengthInput').value = 250;
+    if (document.getElementById('sandLengthInput')) document.getElementById('sandLengthInput').value = 250;
+    if (document.getElementById('woodLengthInput')) document.getElementById('woodLengthInput').value = 250;
+
+    updateTrackInputVisibility(); 
+    updateTerrainStructure();
+    resizeCanvas();
+    setupEventListeners();
+    
+    requestAnimationFrame(gameLoop);
+});

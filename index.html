@@ -7,23 +7,135 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- Main Game Container -->
     <div id="gameContainer">
-        <!-- Sky Background Canvas (Parallax) -->
+      <div id="mainMenu" class="screen">
+          <div class="menu-container">
+            <h1 class="game-title">🏎️ SURFACE MATTERS</h1>
+            <p class="game-subtitle">A PHysics-Based Simulation on Car Movement and Friction</p>
+        
+        <div class="menu-content">
+            <h2>🎮 How to Play</h2>
+            <ul class="instructions">
+                <li>⬆️ <strong>Arrow Up</strong> or <strong>Accelerate Button</strong> - Speed up</li>
+                <li>⬇️ <strong>Arrow Down</strong> or <strong>Brake Button</strong> - Slow down</li>
+                <li>⏸️ <strong>Spacebar</strong> - Pause/Resume</li>
+                <li>🔄 <strong>R Key</strong> - Reset simulation</li>
+            </ul>
+            
+            <h2>🏁 Objective</h2>
+            <p class="objective">Drive through terrain with varying friction coefficients and slopes. Experience realistic physics as you traverse Ice, Sand, and Wood surfaces!</p>
+            
+            <div class="terrain-preview">
+                <div class="preview-card">🧊 Ice - Low Friction</div>
+                <div class="preview-card">🏖️ Sand - High Friction</div>
+                <div class="preview-card">🪵 Wood - Medium Friction</div>
+            </div>
+
+            <h2>⚙️ Physics Configuration</h2>
+            
+            <div class="config-section">
+                <h3>🛣️ Track Configuration</h3>
+                
+                <div class="equal-length-toggle">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="equalLengthToggle" checked>
+                        <span>Equal length for all terrains</span>
+                    </label>
+                </div>
+                
+                <div class="input-grid" id="trackConfig">
+                    <div class="input-group">
+                        <label for="totalTrackLength">
+                            <span class="input-label">Total Track Length</span>
+                            <span class="input-unit">(m)</span>
+                        </label>
+                        <input type="number" id="totalTrackLength" min="300" max="5000" value="750" step="50">
+                    </div>
+                    
+                    <div class="input-group terrain-length" id="iceLength" style="display: none;">
+                        <label for="iceLengthInput">
+                            <span class="input-label">🧊 Ice Length</span>
+                            <span class="input-unit">(m)</span>
+                        </label>
+                        <input type="number" id="iceLengthInput" min="50" max="2000" value="250" step="10">
+                    </div>
+                    
+                    <div class="input-group terrain-length" id="sandLength" style="display: none;">
+                        <label for="sandLengthInput">
+                            <span class="input-label">🏖️ Sand Length</span>
+                            <span class="input-unit">(m)</span>
+                        </label>
+                        <input type="number" id="sandLengthInput" min="50" max="2000" value="250" step="10">
+                    </div>
+                    
+                    <div class="input-group terrain-length" id="woodLength" style="display: none;">
+                        <label for="woodLengthInput">
+                            <span class="input-label">🪵 Wood Length</span>
+                            <span class="input-unit">(m)</span>
+                        </label>
+                        <input type="number" id="woodLengthInput" min="50" max="2000" value="250" step="10">
+                    </div>
+                </div>
+            </div>
+
+            <div class="config-section">
+                <h3>🚗 Vehicle Physics</h3>
+                <div class="input-grid">
+                    <div class="input-group">
+                        <label for="carMass">
+                            <span class="input-label">Car Mass</span>
+                            <span class="input-unit">(kg)</span>
+                        </label>
+                        <input type="number" id="carMass" min="500" max="5000" value="1000" step="50">
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="maxSpeed">
+                            <span class="input-label">Max Speed</span>
+                            <span class="input-unit">(m/s)</span>
+                        </label>
+                        <input type="number" id="maxSpeed" min="10" max="150" value="50" step="5">
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="engineAccel">
+                            <span class="input-label">Acceleration</span>
+                            <span class="input-unit">(m/s²)</span>
+                        </label>
+                        <input type="number" id="engineAccel" min="1" max="20" value="6" step="0.5">
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="gravityValue">
+                            <span class="input-label">Gravity</span>
+                            <span class="input-unit">(m/s²)</span>
+                        </label>
+                        <input type="number" id="gravityValue" min="1" max="20" value="9.8" step="0.1">
+                    </div>
+                </div>
+            </div>
+
+            <div class="preset-buttons">
+                <button class="preset-btn" id="presetEarth">🌍 Earth</button>
+                <button class="preset-btn" id="presetMoon">🌙 Moon</button>
+                <button class="preset-btn" id="presetMars">🔴 Mars</button>
+                <button class="preset-btn" id="presetCustom">⚡ Performance</button>
+            </div>
+        </div>
+        
+        <button id="startBtn" class="start-btn">🚀 START SIMULATION</button>
+    </div>
+</div>
         <canvas id="skyCanvas"></canvas>
         
-        <!-- Main Game Canvas -->
         <canvas id="gameCanvas"></canvas>
         
-        <!-- HUD Overlay -->
         <div id="hud">
-            <!-- Speedometer Panel -->
             <div class="hud-panel" id="speedometerPanel">
                 <canvas id="speedCanvas" width="200" height="200"></canvas>
                 <div id="speedDigital">0 km/h</div>
             </div>
             
-            <!-- Terrain Info Panel -->
             <div class="hud-panel" id="terrainInfo">
                 <div class="terrain-name" id="terrainName">🧊 ICE</div>
                 <div class="stat">
@@ -40,7 +152,6 @@
                 </div>
             </div>
             
-            <!-- Physics Data Panel -->
             <div class="hud-panel" id="physicsPanel">
                 <h3>⚙️ Physics Data</h3>
                 <div class="stat">
@@ -61,12 +172,11 @@
                 </div>
                 <div class="stat">
                     <span class="stat-label">Gravity Force:</span>
-                    <span class="stat-value" id="gravityValue">0.0 m/s²</span>
+                    <span class="stat-value" id="gravityValueDisplay">0.0 m/s²</span>
                 </div>
             </div>
         </div>
         
-        <!-- Education Panel (Right Side) -->
         <div id="educationPanel" class="hud-panel">
             <button id="toggleEducation" class="toggle-btn">📚 Hide Info</button>
             <div id="educationContent">
@@ -92,21 +202,21 @@
                 <h3>🏁 Terrain Types</h3>
                 
                 <div class="terrain-card">
-                    <div class="terrain-header">🧊 ICE (0-250m)</div>
+                    <div class="terrain-header">🧊 ICE</div>
                     <div class="terrain-detail">μ = 0.15 | Low friction</div>
-                    <div class="terrain-detail">Slopes: -3° to +5°</div>
+                    <div class="terrain-detail">Slopes: -7° to +8°</div>
                 </div>
                 
                 <div class="terrain-card">
-                    <div class="terrain-header">🏖️ SAND (250-500m)</div>
+                    <div class="terrain-header">🏖️ SAND</div>
                     <div class="terrain-detail">μ = 0.70 | High friction</div>
-                    <div class="terrain-detail">Slopes: -2° to +4°</div>
+                    <div class="terrain-detail">Slopes: -6° to +9°</div>
                 </div>
                 
                 <div class="terrain-card">
-                    <div class="terrain-header">🪵 WOOD (500-750m)</div>
+                    <div class="terrain-header">🪵 WOOD</div>
                     <div class="terrain-detail">μ = 0.40 | Medium friction</div>
-                    <div class="terrain-detail">Slopes: -4° to +6°</div>
+                    <div class="terrain-detail">Slopes: -8° to +10°</div>
                 </div>
                 
                 <h3>📊 Live Graph</h3>
@@ -119,7 +229,6 @@
             </div>
         </div>
         
-        <!-- Control Buttons -->
         <div id="controls">
             <button class="control-btn" id="accelerateBtn">⬆️ ACCELERATE (↑)</button>
             <button class="control-btn" id="brakeBtn">⬇️ BRAKE (↓)</button>
@@ -127,7 +236,6 @@
             <button class="control-btn" id="resetBtn">🔄 RESET (R)</button>
         </div>
         
-        <!-- Results Screen (Hidden Initially) -->
         <div id="resultsScreen" class="screen hidden">
             <div class="results-container">
                 <h1>🏁 Simulation Complete!</h1>
@@ -158,6 +266,7 @@
                 <canvas id="resultsGraph" width="700" height="300"></canvas>
                 
                 <div class="results-actions">
+                    <button class="control-btn" id="backToMenuBtn">🏠 Back to Menu</button>
                     <button class="control-btn" id="restartBtn">🔄 Restart Simulation</button>
                 </div>
             </div>
