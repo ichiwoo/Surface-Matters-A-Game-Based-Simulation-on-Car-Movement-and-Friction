@@ -595,7 +595,7 @@ function renderGame() {
     
     // Draw distance markers
     gameCx.fillStyle = '#000000ff';
-    gameCx.font = 'bold 18px Arial';
+    gameCx.font = 'bold 16px Arial';
     gameCx.textAlign = 'center';
     for (let i = Math.floor(visibleStart / 50) * 50; i <= visibleEnd; i += 50) {
         const x = (i - state.cameraOffset + 150) * scale;
@@ -934,3 +934,4 @@ document.addEventListener('DOMContentLoaded', () => {
     requestAnimationFrame(gameLoop);
 
 });
+
